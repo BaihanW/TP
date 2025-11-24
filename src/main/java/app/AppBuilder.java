@@ -1,5 +1,6 @@
 package app;
 
+import data_access.InMemoryItineraryDataAccessObject;
 import data_access.OSMDataAccessObject;
 import data_access.RoutingDataAccessObject;
 import interface_adapter.ViewManagerModel;
@@ -46,9 +47,11 @@ public class AppBuilder {
     private final HttpClient client = HttpClient.newHttpClient();
     final OSMDataAccessObject osmDataAccessObject = new OSMDataAccessObject(client);
     final RoutingDataAccessObject routingDataAccessObject = new RoutingDataAccessObject(client);
+    final ItineraryDataAccessInterface itineraryDataAccessObject = new InMemoryItineraryDataAccessObject();
 
 
     private SearchViewModel searchViewModel;
+    private ItineraryViewModel itineraryViewModel;
     private SearchView searchView;
 
     public AppBuilder() {
@@ -57,7 +60,8 @@ public class AppBuilder {
 
     public AppBuilder addSearchView() {
         searchViewModel = new SearchViewModel();
-        searchView = new SearchView(searchViewModel);
+        itineraryViewModel = new ItineraryViewModel();
+        searchView = new SearchView(searchViewModel, itineraryViewModel, itineraryDataAccessObject);
         cardPanel.add(searchView, searchView.getViewName());
         return this;
     }
