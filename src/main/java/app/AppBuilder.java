@@ -30,6 +30,12 @@ import javax.swing.*;
 import java.awt.*;
 import java.net.http.HttpClient;
 
+/**
+ * Configures and wires the application using the simplified Clean Architecture graph. The
+ * itinerary state is held in {@link SearchViewModel}, so the interactors operate directly on
+ * that model without an extra gateway. This keeps the merge-safe structure explicit and avoids
+ * dangling dependencies from older branches that referenced an itinerary DAO.
+ */
 public class AppBuilder {
 
     private final JPanel cardPanel = new JPanel();
