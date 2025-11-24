@@ -1,5 +1,6 @@
 package app;
 
+import data_access.InMemoryItineraryDataAccessObject;
 import data_access.OSMDataAccessObject;
 import data_access.RoutingDataAccessObject;
 import interface_adapter.ViewManagerModel;
@@ -7,10 +8,8 @@ import interface_adapter.generate_route.GenerateRouteController;
 import interface_adapter.generate_route.GenerateRoutePresenter;
 import interface_adapter.remove_marker.RemoveMarkerController;
 import interface_adapter.remove_marker.RemoveMarkerPresenter;
-import interface_adapter.remove_marker.SearchStateRemoveDataAccess;
 import interface_adapter.reorder.ReorderController;
 import interface_adapter.reorder.ReorderPresenter;
-import interface_adapter.reorder.SearchStateReorderDataAccess;
 import interface_adapter.search.SearchController;
 import interface_adapter.search.SearchPresenter;
 import interface_adapter.search.SearchViewModel;
@@ -19,7 +18,6 @@ import use_case.generate_route.GenerateRouteInteractor;
 import use_case.generate_route.GenerateRouteOutputBoundary;
 import use_case.remove_marker.RemoveMarkerInputBoundary;
 import use_case.remove_marker.RemoveMarkerInteractor;
-import use_case.remove_marker.RemoveMarkerDataAccessInterface;
 import use_case.remove_marker.RemoveMarkerOutputBoundary;
 import use_case.reorder.ReorderInputBoundary;
 import use_case.reorder.ReorderInteractor;
@@ -35,8 +33,9 @@ import java.net.http.HttpClient;
 
 /**
  * Configures and wires the application using the simplified Clean Architecture graph. The
- * itinerary state is held in {@link SearchViewModel} and exposed to use cases through small
- * adapters, keeping interactors independent of Swing while avoiding any separate itinerary DAO.
+ * itinerary state is held in {@link SearchViewModel}, so the interactors operate directly on
+ * that model without an extra gateway. This keeps the merge-safe structure explicit and avoids
+ * dangling dependencies from older branches that referenced an itinerary DAO.
  */
 public class AppBuilder {
 
@@ -48,9 +47,11 @@ public class AppBuilder {
     private final HttpClient client = HttpClient.newHttpClient();
     final OSMDataAccessObject osmDataAccessObject = new OSMDataAccessObject(client);
     final RoutingDataAccessObject routingDataAccessObject = new RoutingDataAccessObject(client);
+    final ItineraryDataAccessInterface itineraryDataAccessObject = new InMemoryItineraryDataAccessObject();
 
 
     private SearchViewModel searchViewModel;
+    private ItineraryViewModel itineraryViewModel;
     private SearchView searchView;
 
     public AppBuilder() {
@@ -59,7 +60,8 @@ public class AppBuilder {
 
     public AppBuilder addSearchView() {
         searchViewModel = new SearchViewModel();
-        searchView = new SearchView(searchViewModel);
+        itineraryViewModel = new ItineraryViewModel();
+        searchView = new SearchView(searchViewModel, itineraryViewModel, itineraryDataAccessObject);
         cardPanel.add(searchView, searchView.getViewName());
         return this;
     }
@@ -74,14 +76,12 @@ public class AppBuilder {
 
         searchView.setOsmDataAccessObject(osmDataAccessObject);
 
-        final RemoveMarkerDataAccessInterface removeDataAccess = new SearchStateRemoveDataAccess(searchViewModel);
         final RemoveMarkerOutputBoundary removeOutputBoundary = new RemoveMarkerPresenter(searchViewModel);
-        final RemoveMarkerInputBoundary removeInteractor = new RemoveMarkerInteractor(removeDataAccess, removeOutputBoundary);
+        final RemoveMarkerInputBoundary removeInteractor = new RemoveMarkerInteractor(removeOutputBoundary);
         searchView.setRemoveMarkerController(new RemoveMarkerController(removeInteractor));
 
         final ReorderOutputBoundary reorderOutputBoundary = new ReorderPresenter(searchViewModel);
-        final ReorderInputBoundary reorderInteractor = new ReorderInteractor(
-                new SearchStateReorderDataAccess(searchViewModel), reorderOutputBoundary);
+        final ReorderInputBoundary reorderInteractor = new ReorderInteractor(reorderOutputBoundary);
         searchView.setReorderController(new ReorderController(reorderInteractor));
 
         final GenerateRouteOutputBoundary generateRoutePresenter = new GenerateRoutePresenter(searchViewModel);
