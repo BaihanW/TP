@@ -60,10 +60,12 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
     /**
      * Construct the SearchView JPanel from its SearchViewModel (contain states of the search view)
      */
-    public SearchView(SearchViewModel searchViewModel) {
+    public SearchView(SearchViewModel searchViewModel, ItineraryViewModel itineraryViewModel,
+                     ItineraryDataAccessInterface itineraryDataAccess) {
         this.viewName = searchViewModel.getViewName();
         this.searchViewModel = searchViewModel;
         searchViewModel.addPropertyChangeListener(this);
+        itineraryViewModel.addPropertyChangeListener(this);
 
         search.addActionListener(
                 evt -> {
@@ -741,6 +743,33 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
             mapPanel.setCenter(state.getLatitude(), state.getLongitude());
             addStop(state.getLocationName(), new GeoPosition(state.getLatitude(), state.getLongitude()));
             computeAndDisplayRouteIfAuto();
+        }
+    }
+
+    private void handleItineraryState(ItineraryState state, String propertyName) {
+        if ("stops".equals(propertyName) || "state".equals(propertyName)) {
+            stopsListModel.clear();
+            for (String name : state.getStopNames()) {
+                stopsListModel.addElement(name);
+            }
+            if (!stopsListModel.isEmpty()) {
+                stopsList.setSelectedIndex(Math.max(0, Math.min(stopsListModel.size() - 1, stopsList.getSelectedIndex())));
+            }
+            mapPanel.setStops(state.getStops());
+            if (state.getStops().size() < 2) {
+                mapPanel.clearRoute();
+            }
+            computeAndDisplayRouteIfAuto();
+        }
+
+        if ("route".equals(propertyName)) {
+            mapPanel.setRouteSegments(state.getRouteSegments());
+            hideRerouteProgress();
+        }
+
+        if ("error".equals(propertyName) && state.getErrorMessage() != null) {
+            JOptionPane.showMessageDialog(this, state.getErrorMessage());
+            hideRerouteProgress();
         }
     }
 
