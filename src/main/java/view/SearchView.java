@@ -1,6 +1,6 @@
 package view;
 
-import interface_adapter.addMarker.AddMarkerController;
+import data_access.OSMDataAccessObject;
 import interface_adapter.generate_route.GenerateRouteController;
 import interface_adapter.remove_marker.RemoveMarkerController;
 import interface_adapter.search.SearchController;
@@ -33,17 +33,16 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
     private final JButton search =  new JButton("Search");
     private final JButton routeButton = new JButton("Route");
     private transient SearchController searchController = null;
-    private transient AddMarkerController addMarkerController = null;
     private transient RemoveMarkerController removeMarkerController = null;
     private transient ReorderController reorderController = null;
     private transient GenerateRouteController generateRouteController = null;
     private final MapPanel mapPanel = new MapPanel();
 
+    private OSMDataAccessObject osmDao = null;
+
     private final DefaultListModel<String> stopsListModel = new DefaultListModel<>();
     private final JList<String> stopsList = new JList<>(stopsListModel);
-    private final JPopupMenu suggestionPopup = new JPopupMenu();
-    private final JList<String> suggestionList = new JList<>();
-    private final List<SearchSuggestionViewData> currentSuggestions = new ArrayList<>();
+    private final List<entity.Location> currentSuggestions = new ArrayList<>();
 
     // progress UI for rerouting
     private final JPanel progressPanelContainer; // hold in bottom-right
@@ -61,10 +60,12 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
     /**
      * Construct the SearchView JPanel from its SearchViewModel (contain states of the search view)
      */
-    public SearchView(SearchViewModel searchViewModel) {
+    public SearchView(SearchViewModel searchViewModel, ItineraryViewModel itineraryViewModel,
+                     ItineraryDataAccessInterface itineraryDataAccess) {
         this.viewName = searchViewModel.getViewName();
         this.searchViewModel = searchViewModel;
         searchViewModel.addPropertyChangeListener(this);
+        itineraryViewModel.addPropertyChangeListener(this);
 
         search.addActionListener(
                 evt -> {
@@ -204,7 +205,7 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
                 int idx = suggestionList.locationToIndex(evt.getPoint());
                 if (idx >= 0 && idx < currentSuggestions.size()) {
                     SearchSuggestionViewData chosen = currentSuggestions.get(idx);
-                    requestAddStop(chosen.getName(), new GeoPosition(chosen.getLatitude(), chosen.getLongitude()));
+                    addStop(chosen.getName(), new GeoPosition(chosen.getLatitude(), chosen.getLongitude()));
                     suggestionPopup.setVisible(false);
                 }
             }
@@ -215,7 +216,7 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
                     int idx = suggestionList.getSelectedIndex();
                     if (idx >= 0 && idx < currentSuggestions.size()) {
                         SearchSuggestionViewData chosen = currentSuggestions.get(idx);
-                        requestAddStop(chosen.getName(), new GeoPosition(chosen.getLatitude(), chosen.getLongitude()));
+                        addStop(chosen.getName(), new GeoPosition(chosen.getLatitude(), chosen.getLongitude()));
                         suggestionPopup.setVisible(false);
                     }
                 }
@@ -538,7 +539,7 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
             public void mouseClicked(java.awt.event.MouseEvent evt) {
                 if (evt.getClickCount() == 2) {
                     int idx = stopsList.locationToIndex(evt.getPoint());
-                    List<GeoPosition> stops = searchViewModel.getState().getStops();
+                    List<GeoPosition> stops = itineraryDataAccess.getStops();
                     if (idx >= 0 && idx < stops.size()) {
                         GeoPosition p = stops.get(idx);
                         mapPanel.setCenter(p.getLatitude(), p.getLongitude());
@@ -601,10 +602,18 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
         worker.execute();
     }
 
-    private void requestAddStop(String name, GeoPosition gp) {
-        if (addMarkerController != null) {
-            addMarkerController.addMarker(name, gp.getLatitude(), gp.getLongitude());
-        }
+    private void addStop(String name, GeoPosition gp) {
+        SearchState current = new SearchState(searchViewModel.getState());
+        List<String> names = new ArrayList<>(current.getStopNames());
+        names.add(name);
+        current.setStopNames(names);
+
+        List<GeoPosition> updatedStops = new ArrayList<>(current.getStops());
+        updatedStops.add(gp);
+        current.setStops(updatedStops);
+        current.setErrorMessage(null);
+        searchViewModel.setState(current);
+        searchViewModel.firePropertyChange("stops");
     }
 
     private void moveSelected(int delta) {
@@ -612,14 +621,16 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
         if (idx == -1) return;
         int newIdx = idx + delta;
         if (reorderController != null) {
-            reorderController.move(idx, newIdx);
+            reorderController.move(idx, newIdx, searchViewModel.getState().getStopNames(),
+                    searchViewModel.getState().getStops());
         }
     }
 
     private void removeSelected() {
         int idx = stopsList.getSelectedIndex();
         if (removeMarkerController != null) {
-            removeMarkerController.removeAt(idx);
+            removeMarkerController.removeAt(idx, searchViewModel.getState().getStopNames(),
+                    searchViewModel.getState().getStops());
         }
     }
 
@@ -661,22 +672,6 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
             return;
         }
 
-        if ("suggestions".equals(propertyName)) {
-            updateSuggestionDropdown(state.getSuggestions());
-            return;
-        }
-
-        if ("reverse".equals(propertyName)) {
-            SearchSuggestionViewData resolved = state.getResolvedClickLocation();
-            if (resolved != null) {
-                requestAddStop(resolved.getName(), new GeoPosition(resolved.getLatitude(), resolved.getLongitude()));
-                SearchState cleared = new SearchState(state);
-                cleared.setResolvedClickLocation(null);
-                searchViewModel.setState(cleared);
-            }
-            return;
-        }
-
         if ("route".equals(propertyName)) {
             mapPanel.setRouteSegments(state.getRouteSegments());
             hideRerouteProgress();
@@ -714,6 +709,33 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
         }
     }
 
+    private void handleItineraryState(ItineraryState state, String propertyName) {
+        if ("stops".equals(propertyName) || "state".equals(propertyName)) {
+            stopsListModel.clear();
+            for (String name : state.getStopNames()) {
+                stopsListModel.addElement(name);
+            }
+            if (!stopsListModel.isEmpty()) {
+                stopsList.setSelectedIndex(Math.max(0, Math.min(stopsListModel.size() - 1, stopsList.getSelectedIndex())));
+            }
+            mapPanel.setStops(state.getStops());
+            if (state.getStops().size() < 2) {
+                mapPanel.clearRoute();
+            }
+            computeAndDisplayRouteIfAuto();
+        }
+
+        if ("route".equals(propertyName)) {
+            mapPanel.setRouteSegments(state.getRouteSegments());
+            hideRerouteProgress();
+        }
+
+        if ("error".equals(propertyName) && state.getErrorMessage() != null) {
+            JOptionPane.showMessageDialog(this, state.getErrorMessage());
+            hideRerouteProgress();
+        }
+    }
+
     private void setFields(SearchState state) {
         searchInputField.setText(state.getLocationName());
     }
@@ -745,8 +767,8 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
         this.searchController = searchController;
     }
 
-    public void setAddMarkerController(AddMarkerController addMarkerController) {
-        this.addMarkerController = addMarkerController;
+    public void setOsmDataAccessObject(OSMDataAccessObject osmDao) {
+        this.osmDao = osmDao;
     }
 
     public void setRemoveMarkerController(RemoveMarkerController removeMarkerController) {

@@ -6,20 +6,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class RemoveMarkerInteractor implements RemoveMarkerInputBoundary {
-    private final RemoveMarkerDataAccessInterface dataAccess;
     private final RemoveMarkerOutputBoundary removeMarkerPresenter;
 
-    public RemoveMarkerInteractor(RemoveMarkerDataAccessInterface dataAccess,
-                                  RemoveMarkerOutputBoundary removeMarkerPresenter) {
-        this.dataAccess = dataAccess;
+    public RemoveMarkerInteractor(RemoveMarkerOutputBoundary removeMarkerPresenter) {
         this.removeMarkerPresenter = removeMarkerPresenter;
     }
 
     @Override
     public void execute(RemoveMarkerInputData inputData) {
         int index = inputData.getIndex();
-        List<GeoPosition> stops = new ArrayList<>(dataAccess.getStops());
-        List<String> names = new ArrayList<>(dataAccess.getStopNames());
+        List<GeoPosition> stops = new ArrayList<>(inputData.getStops());
+        List<String> names = new ArrayList<>(inputData.getStopNames());
 
         if (index < 0 || index >= stops.size()) {
             removeMarkerPresenter.prepareFailView("No marker selected to remove.");

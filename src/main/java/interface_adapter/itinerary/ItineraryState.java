@@ -1,27 +1,23 @@
-package interface_adapter.search;
+package interface_adapter.itinerary;
 
 import org.jxmapviewer.viewer.GeoPosition;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class SearchState {
-    private String locationName;
-    private double latitude;
-    private double longitude;
-    private String searchError;
-    private List<String> stopNames = new ArrayList<>();
-    private List<GeoPosition> stops = new ArrayList<>();
-    private List<List<GeoPosition>> routeSegments = new ArrayList<>();
+public class ItineraryState {
+    private List<String> stopNames;
+    private List<GeoPosition> stops;
+    private List<List<GeoPosition>> routeSegments;
     private String errorMessage;
 
-    public SearchState() {}
+    public ItineraryState() {
+        this.stopNames = new ArrayList<>();
+        this.stops = new ArrayList<>();
+        this.routeSegments = new ArrayList<>();
+    }
 
-    public SearchState(SearchState copy) {
-        this.locationName = copy.getLocationName();
-        this.latitude = copy.getLatitude();
-        this.longitude = copy.getLongitude();
-        this.searchError = copy.getSearchError();
+    public ItineraryState(ItineraryState copy) {
         this.stopNames = new ArrayList<>(copy.getStopNames());
         this.stops = new ArrayList<>(copy.getStops());
         this.routeSegments = new ArrayList<>();
@@ -29,38 +25,6 @@ public class SearchState {
             this.routeSegments.add(new ArrayList<>(segment));
         }
         this.errorMessage = copy.getErrorMessage();
-    }
-
-    public double getLatitude() {
-        return latitude;
-    }
-
-    public void setLatitude(double latitude) {
-        this.latitude = latitude;
-    }
-
-    public double getLongitude() {
-        return longitude;
-    }
-
-    public void setLongitude(double longitude) {
-        this.longitude = longitude;
-    }
-
-    public String getLocationName() {
-        return locationName;
-    }
-
-    public void setLocationName(String locationName) {
-        this.locationName = locationName;
-    }
-
-    public String getSearchError() {
-        return searchError;
-    }
-
-    public void setSearchError(String searchError) {
-        this.searchError = searchError;
     }
 
     public List<String> getStopNames() {

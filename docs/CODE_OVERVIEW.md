@@ -24,7 +24,6 @@ This document explains the main layers and classes in the SwingTripPlanner proje
   - `interface_adapter/search/SearchViewModel` holds the active search query, coordinates, stop names/positions, route segments, and any error messages surfaced by the use cases.
 
 ## Use Cases (business rules)
-- **File layout per use case (6 files)**: each package contains `*InputBoundary`, `*OutputBoundary`, `*InputData`, `*OutputData`, `*DataAccessInterface`, and `*Interactor` to mirror the Clean Architecture flow from incoming request to data gateway and presenter response.
 - **Search**: `use_case/search/SearchInteractor` validates and geocodes a query via `OSMDataAccessObject`, then reports coordinates through the presenter.
 - **Add Marker**: `use_case/add_marker/AddMarkerInteractor` appends a new stop to the itinerary unless a duplicate coordinate already exists.
 - **Remove Marker**: `use_case/remove_marker/RemoveMarkerInteractor` validates the selected index, drops that stop from the provided lists, and emits the updated stops.
@@ -32,7 +31,7 @@ This document explains the main layers and classes in the SwingTripPlanner proje
 - **Generate Route**: `use_case/generate_route/GenerateRouteInteractor` walks consecutive stops passed in by the controller, calls the routing DAO for each leg, and aggregates the resulting geometry; falls back to straight lines on errors.
 
 ## Dependency Injection
-- **`app/AppBuilder`** wires the object graph: it instantiates DAOs, the shared search view model, interactors, and their controllers/presenters, then injects them into `SearchView`. The stop list now lives in the view model itself and is passed to the business rules when needed; there is no standalone itinerary DAO (older branches referenced `InMemoryItineraryDataAccessObject`, which has been removed).
+- **`app/AppBuilder`** wires the object graph: it instantiates DAOs, the shared search view model, interactors, and their controllers/presenters, then injects them into `SearchView`. The stop list now lives in the view model itself and is passed to the business rules when needed.
 
 ## UI Flow at Runtime
 1. User enters a city and clicks **Search** → `SearchController` → `SearchInteractor` → `SearchPresenter` updates the search view model → `SearchView` centers the map and adds the stop.
