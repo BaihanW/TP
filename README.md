@@ -16,8 +16,4 @@ stories:
 The stop list shared by these use cases lives in the `SearchState` view model.
 Controllers pass the current stop names and coordinates straight into the
 interactors, keeping storage concerns out of the UI while avoiding an extra
-gateway abstraction; earlier branches that referenced an
-`InMemoryItineraryDataAccessObject` were simplified away during the latest
-cleanup, so there is no separate itinerary DAO to merge.
-
-For a visual overview of the Clean Architecture wiring and request flow, see the UML diagrams in [`docs/UML_DIAGRAM.md`](docs/UML_DIAGRAM.md).
+gateway abstraction.

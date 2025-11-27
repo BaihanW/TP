@@ -1,14 +1,14 @@
 package use_case.reorder;
 
 import org.jxmapviewer.viewer.GeoPosition;
+
+import java.util.ArrayList;
 import java.util.List;
 
 public class ReorderInteractor implements ReorderInputBoundary {
-    private final ReorderDataAccessInterface reorderDataAccess;
     private final ReorderOutputBoundary reorderPresenter;
 
-    public ReorderInteractor(ReorderDataAccessInterface reorderDataAccess, ReorderOutputBoundary reorderPresenter) {
-        this.reorderDataAccess = reorderDataAccess;
+    public ReorderInteractor(ReorderOutputBoundary reorderPresenter) {
         this.reorderPresenter = reorderPresenter;
     }
 
@@ -16,8 +16,8 @@ public class ReorderInteractor implements ReorderInputBoundary {
     public void execute(ReorderInputData inputData) {
         int fromIndex = inputData.getFromIndex();
         int toIndex = inputData.getToIndex();
-        List<String> names = reorderDataAccess.getStopNames();
-        List<GeoPosition> stops = reorderDataAccess.getStops();
+        List<String> names = new ArrayList<>(inputData.getStopNames());
+        List<GeoPosition> stops = new ArrayList<>(inputData.getStops());
         int size = stops.size();
         if (fromIndex < 0 || fromIndex >= size || toIndex < 0 || toIndex >= size) {
             reorderPresenter.prepareFailView("Cannot move marker in that direction.");
