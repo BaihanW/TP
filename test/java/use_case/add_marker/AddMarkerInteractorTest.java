@@ -1,7 +1,6 @@
 package use_case.add_marker;
 
 import entity.Location;
-import entity.Marker;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
