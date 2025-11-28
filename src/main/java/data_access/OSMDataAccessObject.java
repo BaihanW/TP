@@ -11,8 +11,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import entity.Location;
 import use_case.search.SearchDataAccessInterface;
+import use_case.search.LocationSuggestionDataAccessInterface;
+import interface_adapter.search.LocationSuggestionData;
 
-public class OSMDataAccessObject implements SearchDataAccessInterface {
+public class OSMDataAccessObject implements SearchDataAccessInterface, LocationSuggestionDataAccessInterface {
 
     private final HttpClient client;
 
@@ -51,7 +53,8 @@ public class OSMDataAccessObject implements SearchDataAccessInterface {
         return "";
     }
 
-    public Location reverse(double latitude, double longitude) throws IOException, InterruptedException {
+    @Override
+    public LocationSuggestionData reverse(double latitude, double longitude) throws IOException, InterruptedException {
         String url = "https://nominatim.openstreetmap.org/reverse?format=json&lat="
                 + latitude + "&lon=" + longitude + "&zoom=18&addressdetails=0";
 
@@ -70,10 +73,11 @@ public class OSMDataAccessObject implements SearchDataAccessInterface {
         String name = obj.optString("display_name", String.format("%.5f, %.5f", latitude, longitude));
         double lat = obj.optDouble("lat", latitude);
         double lon = obj.optDouble("lon", longitude);
-        return new Location(name, lat, lon);
+        return new LocationSuggestionData(name, lat, lon);
     }
 
-    public java.util.List<Location> searchSuggestions(String query, Double minLon, Double minLat, Double maxLon, Double maxLat, int limit) throws IOException, InterruptedException {
+    @Override
+    public java.util.List<LocationSuggestionData> searchSuggestions(String query, Double minLon, Double minLat, Double maxLon, Double maxLat, int limit) throws IOException, InterruptedException {
         if (query == null || query.isBlank()) return java.util.Collections.emptyList();
         String encoded = URLEncoder.encode(query, StandardCharsets.UTF_8);
         String url = "https://nominatim.openstreetmap.org/search?q=" + encoded + "&format=json&limit=" + limit + "&addressdetails=0";
@@ -93,14 +97,14 @@ public class OSMDataAccessObject implements SearchDataAccessInterface {
         }
 
         JSONArray arr = new JSONArray(response.body());
-        java.util.List<Location> out = new java.util.ArrayList<>();
+        java.util.List<LocationSuggestionData> out = new java.util.ArrayList<>();
         for (int i = 0; i < arr.length(); i++) {
             JSONObject o = arr.getJSONObject(i);
             String name = o.optString("display_name", null);
             double lat = o.optDouble("lat", Double.NaN);
             double lon = o.optDouble("lon", Double.NaN);
             if (name != null && !Double.isNaN(lat) && !Double.isNaN(lon)) {
-                out.add(new Location(name, lat, lon));
+                out.add(new LocationSuggestionData(name, lat, lon));
             }
         }
         return out;

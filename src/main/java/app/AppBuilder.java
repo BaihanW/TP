@@ -6,6 +6,7 @@ import data_access.RoutingDataAccessObject;
 import interface_adapter.ViewManagerModel;
 import interface_adapter.generate_route.GenerateRouteController;
 import interface_adapter.generate_route.GenerateRoutePresenter;
+import interface_adapter.itinerary.ItineraryViewModel;
 import interface_adapter.remove_marker.RemoveMarkerController;
 import interface_adapter.remove_marker.RemoveMarkerPresenter;
 import interface_adapter.reorder.ReorderController;
@@ -16,6 +17,7 @@ import interface_adapter.search.SearchViewModel;
 import use_case.generate_route.GenerateRouteInputBoundary;
 import use_case.generate_route.GenerateRouteInteractor;
 import use_case.generate_route.GenerateRouteOutputBoundary;
+import use_case.itinerary.ItineraryDataAccessInterface;
 import use_case.remove_marker.RemoveMarkerInputBoundary;
 import use_case.remove_marker.RemoveMarkerInteractor;
 import use_case.remove_marker.RemoveMarkerOutputBoundary;
@@ -74,7 +76,7 @@ public class AppBuilder {
         SearchController searchController = new SearchController(searchInteractor);
         searchView.setSearchController(searchController);
 
-        searchView.setOsmDataAccessObject(osmDataAccessObject);
+        searchView.setLocationSuggestionDataAccess(osmDataAccessObject);
 
         final RemoveMarkerOutputBoundary removeOutputBoundary = new RemoveMarkerPresenter(searchViewModel);
         final RemoveMarkerInputBoundary removeInteractor = new RemoveMarkerInteractor(removeOutputBoundary);

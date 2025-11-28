@@ -1,12 +1,13 @@
 package view;
 
-import data_access.OSMDataAccessObject;
 import interface_adapter.generate_route.GenerateRouteController;
+import interface_adapter.itinerary.ItineraryState;
+import interface_adapter.itinerary.ItineraryViewModel;
 import interface_adapter.remove_marker.RemoveMarkerController;
 import interface_adapter.search.SearchController;
 import interface_adapter.search.SearchState;
-import interface_adapter.search.SearchSuggestionViewData;
 import interface_adapter.search.SearchViewModel;
+import interface_adapter.search.LocationSuggestionData;
 import interface_adapter.reorder.ReorderController;
 
 import javax.swing.*;
@@ -20,9 +21,12 @@ import java.awt.event.MouseEvent;
 import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import org.jxmapviewer.viewer.GeoPosition;
+import use_case.itinerary.ItineraryDataAccessInterface;
+import use_case.search.LocationSuggestionDataAccessInterface;
 
 public class SearchView extends JPanel implements ActionListener, PropertyChangeListener {
 
@@ -38,11 +42,11 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
     private transient GenerateRouteController generateRouteController = null;
     private final MapPanel mapPanel = new MapPanel();
 
-    private OSMDataAccessObject osmDao = null;
+    private LocationSuggestionDataAccessInterface locationSuggestionDataAccess = null;
 
     private final DefaultListModel<String> stopsListModel = new DefaultListModel<>();
     private final JList<String> stopsList = new JList<>(stopsListModel);
-    private final List<entity.Location> currentSuggestions = new ArrayList<>();
+    private final List<LocationSuggestionData> currentSuggestions = new ArrayList<>();
 
     // progress UI for rerouting
     private final JPanel progressPanelContainer; // hold in bottom-right
@@ -55,7 +59,7 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
     private final JPanel searchProgressContainer;
     private final JLabel searchProgressLabel;
     private final JProgressBar searchProgressBar;
-    private SwingWorker<Void, Void> suggestionWorker = null;
+    private SwingWorker<List<LocationSuggestionData>, Void> suggestionWorker = null;
 
     /**
      * Construct the SearchView JPanel from its SearchViewModel (contain states of the search view)
@@ -196,6 +200,8 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
         topSearch.add(btns, BorderLayout.EAST);
 
 
+        final JPopupMenu suggestionPopup = new JPopupMenu();
+        final JList<String> suggestionList = new JList<>();
         suggestionList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         suggestionPopup.setBorder(BorderFactory.createLineBorder(Color.GRAY));
         suggestionPopup.add(new JScrollPane(suggestionList));
@@ -204,7 +210,7 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
             public void mouseClicked(java.awt.event.MouseEvent evt) {
                 int idx = suggestionList.locationToIndex(evt.getPoint());
                 if (idx >= 0 && idx < currentSuggestions.size()) {
-                    SearchSuggestionViewData chosen = currentSuggestions.get(idx);
+                    LocationSuggestionData chosen = currentSuggestions.get(idx);
                     addStop(chosen.getName(), new GeoPosition(chosen.getLatitude(), chosen.getLongitude()));
                     suggestionPopup.setVisible(false);
                 }
@@ -215,7 +221,7 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
                 if (evt.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER) {
                     int idx = suggestionList.getSelectedIndex();
                     if (idx >= 0 && idx < currentSuggestions.size()) {
-                        SearchSuggestionViewData chosen = currentSuggestions.get(idx);
+                        LocationSuggestionData chosen = currentSuggestions.get(idx);
                         addStop(chosen.getName(), new GeoPosition(chosen.getLatitude(), chosen.getLongitude()));
                         suggestionPopup.setVisible(false);
                     }
@@ -242,7 +248,7 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
         searchInputField.getDocument().addDocumentListener(new DocumentListener() {
             private void updateSuggestions() {
                 String q = searchInputField.getText();
-                if (q == null || q.isBlank()) {
+                if (locationSuggestionDataAccess == null || q == null || q.isBlank()) {
                     suggestionPopup.setVisible(false);
                     return;
                 }
@@ -255,10 +261,12 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
                 double minLon = lon - delta;
                 double maxLon = lon + delta;
 
+                // cancel previous suggestion worker if running
                 if (suggestionWorker != null && !suggestionWorker.isDone()) {
                     suggestionWorker.cancel(true);
                 }
 
+                // show search progress UI
                 SwingUtilities.invokeLater(() -> {
                     searchProgressLabel.setText("Searching the area...");
                     searchProgressBar.setVisible(true);
@@ -266,19 +274,42 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
 
                 suggestionWorker = new SwingWorker<>() {
                     @Override
-                    protected Void doInBackground() {
-                        if (searchController != null) {
-                            searchController.requestSuggestions(q, minLon, minLat, maxLon, maxLat, 6);
+                    protected List<LocationSuggestionData> doInBackground() throws Exception {
+                        try {
+                            List<LocationSuggestionData> res = locationSuggestionDataAccess.searchSuggestions(q, minLon, minLat, maxLon, maxLat, 6);
+                            if (isCancelled()) return java.util.Collections.emptyList();
+                            return res;
+                        } catch (Exception e) {
+                            return java.util.Collections.emptyList();
                         }
-                        return null;
                     }
 
                     @Override
                     protected void done() {
-                        SwingUtilities.invokeLater(() -> {
-                            searchProgressBar.setVisible(false);
-                            searchProgressLabel.setText("");
-                        });
+                        try {
+                            List<LocationSuggestionData> res = get();
+                            currentSuggestions.clear();
+                            if (res == null || res.isEmpty()) {
+                                suggestionPopup.setVisible(false);
+                                return;
+                            }
+                            currentSuggestions.addAll(res);
+                            DefaultListModel<String> model = new DefaultListModel<>();
+                            for (LocationSuggestionData l : res) model.addElement(l.getName());
+                            suggestionList.setModel(model);
+
+                            suggestionPopup.pack();
+                            suggestionPopup.show(searchInputField, 0, searchInputField.getHeight());
+                            searchInputField.requestFocusInWindow();
+                        } catch (Exception e) {
+                            suggestionPopup.setVisible(false);
+                        } finally {
+                            // hide search progress UI
+                            SwingUtilities.invokeLater(() -> {
+                                searchProgressBar.setVisible(false);
+                                searchProgressLabel.setText("");
+                            });
+                        }
                     }
                 };
                 suggestionWorker.execute();
@@ -530,9 +561,19 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
         });
 
         mapPanel.setClickListener(gp -> {
-            if (searchController != null) {
-                searchController.reverseLookup(gp.getLatitude(), gp.getLongitude());
+            String name = String.format("%.5f, %.5f", gp.getLatitude(), gp.getLongitude());
+            GeoPosition usePos = gp;
+            if (locationSuggestionDataAccess != null) {
+                try {
+                    LocationSuggestionData loc = locationSuggestionDataAccess.reverse(gp.getLatitude(), gp.getLongitude());
+                    if (loc != null) {
+                        name = loc.getName();
+                        usePos = new GeoPosition(loc.getLatitude(), loc.getLongitude());
+                    }
+                } catch (Exception ex) {
+                }
             }
+            addStop(name, usePos);
         });
 
         stopsList.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -652,6 +693,8 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
         Object value = evt.getNewValue();
         if (value instanceof SearchState state) {
             handleSearchState(state, evt.getPropertyName());
+        } else if (value instanceof ItineraryState state) {
+            handleItineraryState(state, evt.getPropertyName());
         }
     }
 
@@ -704,7 +747,7 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
             }, AWTEvent.MOUSE_EVENT_MASK);
         } else {
             mapPanel.setCenter(state.getLatitude(), state.getLongitude());
-            requestAddStop(state.getLocationName(), new GeoPosition(state.getLatitude(), state.getLongitude()));
+            addStop(state.getLocationName(), new GeoPosition(state.getLatitude(), state.getLongitude()));
             computeAndDisplayRouteIfAuto();
         }
     }
@@ -740,25 +783,6 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
         searchInputField.setText(state.getLocationName());
     }
 
-    private void updateSuggestionDropdown(List<SearchSuggestionViewData> suggestions) {
-        currentSuggestions.clear();
-        currentSuggestions.addAll(suggestions);
-
-        DefaultListModel<String> model = new DefaultListModel<>();
-        for (SearchSuggestionViewData item : suggestions) {
-            model.addElement(item.getName());
-        }
-        suggestionList.setModel(model);
-
-        if (!suggestions.isEmpty() && searchInputField.hasFocus()) {
-            suggestionPopup.pack();
-            suggestionPopup.show(searchInputField, 0, searchInputField.getHeight());
-            searchInputField.requestFocusInWindow();
-        } else {
-            suggestionPopup.setVisible(false);
-        }
-    }
-
     public String getViewName() {
         return viewName;
     }
@@ -767,8 +791,8 @@ public class SearchView extends JPanel implements ActionListener, PropertyChange
         this.searchController = searchController;
     }
 
-    public void setOsmDataAccessObject(OSMDataAccessObject osmDao) {
-        this.osmDao = osmDao;
+    public void setLocationSuggestionDataAccess(LocationSuggestionDataAccessInterface locationSuggestionDataAccess) {
+        this.locationSuggestionDataAccess = locationSuggestionDataAccess;
     }
 
     public void setRemoveMarkerController(RemoveMarkerController removeMarkerController) {
